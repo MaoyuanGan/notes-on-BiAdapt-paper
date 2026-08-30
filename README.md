@@ -1,1 +1,147 @@
-# notes-on-BiAdapt-paper
+#### [《Bi-Adapt: Few-shot Bimanual Adaptation for Novel Categories of 3D Objects via Semantic Correspondence》](https://arxiv.org/abs/2602.08425) 论文精读与思考笔记
+<br><br><br><br><br>
+
+# 问题形式化
+
+## 1、总体设定
+
+对于一个放置在地面上的三维物体，给定其在相机的部分扫描下的非完整观测点云 ![](https://latex.codecogs.com/svg.latex?O\in\mathbb{R}^{N\times{}3})（排除不可见的背面、遮挡处），并给定双臂操作任务类型
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?T\in\{\text{Unfolding,Opening,Closing,Uncapping,Capping}\},">
+</p>
+
+神经网络需要在这两个给定的条件下，提出左、右夹爪的动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right),u_2=\left(p_2,R_2\right)) ，其中 ![](https://latex.codecogs.com/svg.latex?p_i\in{}O) 是夹爪与物体的接触点（只能取自于物体的非完整观测点云），![](https://latex.codecogs.com/svg.latex?R_i\in{}SO(3)) 是夹爪在接触时的姿态。<br>
+对于任一夹爪
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?i\in\{1,2\},">
+</p>
+
+它在 ![](https://latex.codecogs.com/svg.latex?p_i\in{}O) 处接触，并沿 ![](https://latex.codecogs.com/svg.latex?R_i\in{}SO(3)) 相对坐标系中的特定方向（例如z轴方向）拉动，就完成了动作 ![](https://latex.codecogs.com/svg.latex?u_i=\left(p_i,R_i\right)) 。在此过程中，夹爪姿态 ![](https://latex.codecogs.com/svg.latex?R_i\in{}SO(3)) 保持不变，拉动方向保持不变。<br>
+总之，整个Bi-Adapt双臂操作框架可以简单概括为一个输入 ![](https://latex.codecogs.com/svg.latex?O,T) 输出 ![](https://latex.codecogs.com/svg.latex?\left(u_1,u_2\right)) 的函数，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\left(u_1,u_2\right)=\text{Bi-Adapt}\left(O,T\right).">
+</p>
+
+## 2、任务的成功标准
+
+- ![](https://latex.codecogs.com/svg.latex?\text{Unfolding,\space{}Opening,\space{}Closing}) ：目标物体旋转关节的角度变化超过该关节旋转范围的 ![](https://latex.codecogs.com/svg.latex?0.10) 倍。
+- ![](https://latex.codecogs.com/svg.latex?\text{Uncapping,\space{}Capping}) ：目标物体移动关节的两部分被分离或拉近超过 ![](https://latex.codecogs.com/svg.latex?0.05) 米，即两部分的距离变化超过 ![](https://latex.codecogs.com/svg.latex?0.05) 米。
+- 所有任务：目标物体的关节作为一个整体，未发生剧烈位移（整体位移小于设定阈值），并且目标物体未倾倒、未翻转。<br><br>
+只有达到以上标准，相应类型的任务才算执行成功。
+<br><br><br><br><br><br><br><br><br><br>
+
+# 神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_2) 的预训练
+
+用于控制左夹爪的神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 由动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 和动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 组成，用于控制右夹爪的神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_2) 由动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 和动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 组成。<br>
+任务执行成功的样本是正样本，任务执行失败的样本是负样本。在预训练数据集的任意一个样本中，三维物体观测点云 ![](https://latex.codecogs.com/svg.latex?O\in\mathbb{R}^{N\times{}3}) 以及左、右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right),u_2=\left(p_2,R_2\right)) 都是已知量，尤其是正样本中的 ![](https://latex.codecogs.com/svg.latex?R_1,R_2\in{}SO(3)) ，它们将作为模型的似然估计对象。<br>
+动作提议网络只在正样本中训练，正样本中的已知量 ![](https://latex.codecogs.com/svg.latex?R_1,R_2\in{}SO(3)) 将分别作为动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1,\mathcal{A}_2) 的预训练标签，或者说动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1,\mathcal{A}_2) 实现极大似然估计的对象。动作评分网络既在正样本中训练，也在负样本中训练，并且正、负样本数量配比设定为 ![](https://latex.codecogs.com/svg.latex?1:1) 。<br>
+
+## 1、动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 的预训练
+
+用 PointNet++ (segmentation version) 神经网络 ![](https://latex.codecogs.com/svg.latex?\text{PN}(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?O\in\mathbb{R}^{N\times{}3}) 进行逐点特征提取，得到点级特征矩阵 ![](https://latex.codecogs.com/svg.latex?F\in\mathbb{R}^{N\times{}128}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?F=\text{PN}(O)\in\mathbb{R}^{N\times{}128}.">
+</p>
+
+用三个多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}_1(\cdot),\text{MLP}_2(\cdot),\text{MLP}_3(\cdot)) 分别对 ![](https://latex.codecogs.com/svg.latex?p_1\in{}O,R_1\in{}SO(3),p_2\in{}O) 进行编码，分别得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{p_1},f_{R_1},f_{p_2}\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\begin{align*}f_{p_1}&=\text{MLP}_1\left(p_1\right)\in\mathbb{R}^{32},\\{}f_{R_1}&=\text{MLP}_2\left(R_1\right)\in\mathbb{R}^{32},\\{}f_{p_2}&=\text{MLP}_3\left(p_2\right)\in\mathbb{R}^{32}.\end{align*}">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 是以cVAE的方式构建的。具体而言，用编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_2\left(\cdot,\cdot,\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?R_2\in{}SO(3),F\in\mathbb{R}^{N\times{}128},f_{p_1}\in\mathbb{R}^{32},f_{R_1}\in\mathbb{R}^{32},f_{p_2}\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_2\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma\in\mathbb{R}^{d\times{}d}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\left(\mu_2,\Sigma_2\right)=\text{Enc}_2\left(R_2,F,f_{p_1},f_{R_1},f_{p_2}\right),">
+</p>
+
+它们组成潜变量分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_2,\Sigma_2\right)) 。从 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_2,\Sigma_2\right)) 中随机采样，得到潜变量 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 。<br>
+用解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_2(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 进行解码，得到预测夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_2\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_2=\text{Dec}_2(z)\in{}SO(3).">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 的预训练损失函数即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{A}_2}=\mathcal{L}_{geo}\left(\widehat{R}_2,R_2\right)+D_{KL}\left(\mathcal{N}\left(\mu_2,\Sigma_2\right)\,\|\;\mathcal{N}\left(0,I\right)\right),">
+</p>
+
+其中测地距离 ![](https://latex.codecogs.com/svg.latex?\mathcal{L}_{geo}\left(\cdot,\cdot\right)) 为自编码器重建损失，![](https://latex.codecogs.com/svg.latex?D_{KL}(\cdot)) 为潜空间正则化项。<br>
+如果要强调cVAE潜变量 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 在预训练中“条件性生成”的本质，则潜空间正则化项可另记为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?D_{KL}\left(q\left(z\;|\;R_2,F,f_{p_1},f_{R_1},f_{p_2}\right)\,\|\;\mathcal{N}\left(0,I\right)\right).">
+</p>
+
+## 2、动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的预训练
+
+用多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}_4(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?R_2\in{}SO(3)) 进行编码，得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{R_2}\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?f_{R_2}=\text{MLP}_4\left(R_2\right)\in\mathbb{R}^{32}.">
+</p>
+
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(\cdot,\cdot,\cdot,\cdot\right)) 接受 ![](https://latex.codecogs.com/svg.latex?f_{p_1},f_{R_1},f_{p_2},f_{R_2}\in\mathbb{R}^{32}) 作为输入，输出一个位于 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内的正实数，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\in\left(0,1\right),">
+</p>
+
+它表征了在左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 先前被执行的条件下，右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_2=\left(p_2,R_2\right)) 被序贯执行后，任务的最终成功概率，是模型针对该预训练样本所估计的似然（连续量）。<br>
+在正样本中，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的预训练损失函数为 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内单调递减的负对数似然，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_2}^\text{positive}=-\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)\in\left(0,+\infty\right),">
+</p>
+
+而在负样本中，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的预训练损失函数为失败概率 ![](https://latex.codecogs.com/svg.latex?1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)) 的负对数，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_2}^\text{negative}=-\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)\in\left(0,+\infty\right),">
+</p>
+
+它在 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内单调递增。<br>
+如果定义
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?r_i\in\{1,0\},">
+</p>
+
+其中 ![](https://latex.codecogs.com/svg.latex?r_i=1) 表示第 ![](https://latex.codecogs.com/svg.latex?i) 个样本为正样本，![](https://latex.codecogs.com/svg.latex?r_i=0) 表示第 ![](https://latex.codecogs.com/svg.latex?i) 个样本为负样本，那么动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 在第 ![](https://latex.codecogs.com/svg.latex?i) 个样本中的预训练损失函数可统一表示为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_2}=-r_i\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)-\left(1-r_i\right)\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right).">
+</p>
+
+## 3、动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的条件概率模型本质
+
+实际上，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 是一个条件概率模型，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?P\left(r_i=1\;|\;f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)=\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)=\widehat{y}_i\in\left(0,1\right),">
+</p>
+
+它在整个预训练数据集中的伯努利似然即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\prod_{i=1}^{N_\text{samples}}\widehat{y}_i^{r_i}\left(1-\widehat{y}_i\right)^{1-r_i},">
+</p>
+
+在第 ![](https://latex.codecogs.com/svg.latex?i) 个样本中的似然即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{y}_i^{r_i}\left(1-\widehat{y}_i\right)^{1-r_i}=\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{r_i}\cdot\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{1-r_i},">
+</p>
+
+为了实现极大似然估计，就需要使其负对数
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?-\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{r_i}-\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{1-r_i}=-r_i\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)-\left(1-r_i\right)\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)">
+</p>
+
