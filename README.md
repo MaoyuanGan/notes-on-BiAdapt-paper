@@ -53,7 +53,7 @@
 <img src="https://latex.codecogs.com/svg.latex?\begin{align*}f_{p_1}&=\text{MLP}_1\left(p_1\right)\in\mathbb{R}^{32},\\{}f_{R_1}&=\text{MLP}_2\left(R_1\right)\in\mathbb{R}^{32},\\{}f_{p_2}&=\text{MLP}_3\left(p_2\right)\in\mathbb{R}^{32}.\end{align*}">
 </p>
 
-动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 是以cVAE的方式构建的。具体而言，用编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_2\left(\cdot,\cdot,\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?R_2\in{}SO(3),F\in\mathbb{R}^{N\times{}128},f_{p_1}\in\mathbb{R}^{32},f_{R_1}\in\mathbb{R}^{32},f_{p_2}\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_2\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma\in\mathbb{R}^{d\times{}d}) ，即
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 是以cVAE的方式构建的。具体而言，用编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_2\left(\cdot,\cdot,\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?R_2\in{}SO(3),F\in\mathbb{R}^{N\times{}128},f_{p_1}\in\mathbb{R}^{32},f_{R_1}\in\mathbb{R}^{32},f_{p_2}\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_2\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma_2\in\mathbb{R}^{d\times{}d}) ，即
 
 <p align="center">
 <img src="https://latex.codecogs.com/svg.latex?\left(\mu_2,\Sigma_2\right)=\text{Enc}_2\left(R_2,F,f_{p_1},f_{R_1},f_{p_2}\right),">
@@ -93,7 +93,7 @@
 <img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\in\left(0,1\right),">
 </p>
 
-它表征了在左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 先前被执行的条件下，右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_2=\left(p_2,R_2\right)) 被序贯执行后，任务的最终成功概率，是模型针对该预训练样本所估计的似然（连续量）。<br>
+它表征了在左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 先前被执行的条件下，右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_2=\left(p_2,R_2\right)) 被序贯执行后，任务的最终成功概率，是模型针对该预训练样本的正负性（二元离散量）所估计的似然（连续量）。<br>
 在正样本中，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的预训练损失函数为 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内单调递减的负对数似然，即
 
 <p align="center">
@@ -145,3 +145,82 @@
 <img src="https://latex.codecogs.com/svg.latex?-\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{r_i}-\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)^{1-r_i}=-r_i\log\left(\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)-\left(1-r_i\right)\log\left(1-\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\right)">
 </p>
 
+作为动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的预训练损失函数。
+<br><br><br><br><br><br><br><br><br><br>
+
+# 神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 的预训练
+
+在众多且各异的正样本中进行预训练后，动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 拥有了在众多且各异的左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 条件下，生成合适的右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_2=\left(p_2,R_2\right)) 的能力，也就是说，拥有了生成与各种左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 均能展开有效协作的右夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_2=\left(p_2,R_2\right)) 的能力。<br>
+由此，双臂操作任务最终成败的责任便压在了动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 身上。在经过专门的预训练后，它需要提出便于动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 配合的左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) ，从而有利于最终成功完成双臂操作任务。
+
+## 1、动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 的预训练
+
+用多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?p_1\in{}O) 进行编码，得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{p_1}^\prime\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?f_{p_1}^\prime=\text{MLP}\left(p_1\right)\in\mathbb{R}^{32}.">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 也是以cVAE的方式构建的。具体而言，用编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_1\left(\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?R_1\in{}SO(3),F\in\mathbb{R}^{N\times{}128},f_{p_1}^\prime\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_1\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma_1\in\mathbb{R}^{d\times{}d}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\left(\mu_1,\Sigma_1\right)=\text{Enc}_1\left(R_1,F,f_{p_1}^\prime\right),">
+</p>
+
+它们组成潜变量分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_1,\Sigma_1\right)) 。从 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_1,\Sigma_1\right)) 中随机采样，得到潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 。<br>
+用解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_1(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 进行解码，得到预测夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_1\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_1=\text{Dec}_1(z^\prime)\in{}SO(3).">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 的预训练损失函数即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{A}_1}=\mathcal{L}_{geo}\left(\widehat{R}_1,R_1\right)+D_{KL}\left(\mathcal{N}\left(\mu_1,\Sigma_1\right)\,\|\;\mathcal{N}\left(0,I\right)\right),">
+</p>
+
+其中测地距离 ![](https://latex.codecogs.com/svg.latex?\mathcal{L}_{geo}\left(\cdot,\cdot\right)) 为自编码器重建损失，![](https://latex.codecogs.com/svg.latex?D_{KL}(\cdot)) 为潜空间正则化项。<br>
+如果要强调cVAE潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 在预训练中“条件性生成”的本质，则潜空间正则化项可另记为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?D_{KL}\left(q\left(z^\prime\;|\;R_1,F,f_{p_1}^\prime\right)\,\|\;\mathcal{N}\left(0,I\right)\right).">
+</p>
+
+## 2、动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 的预训练
+
+用多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}^\prime(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?R_1\in{}SO(3)) 进行编码，得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{R_1}^\prime\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?f_{R_1}^\prime=\text{MLP}^\prime\left(R_1\right)\in\mathbb{R}^{32}.">
+</p>
+
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1\left(\cdot,\cdot\right)) 接受 ![](https://latex.codecogs.com/svg.latex?f_{p_1}^\prime,f_{R_1}^\prime\in\mathbb{R}^{32}) 作为输入，输出一个位于 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内的正实数，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\in\left(0,1\right),">
+</p>
+
+它表征了在左夹爪动作 ![](https://latex.codecogs.com/svg.latex?u_1=\left(p_1,R_1\right)) 被执行后，任务的最终成功概率（模型所估计的似然）。<br>
+在正样本中，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 的预训练损失函数为 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内单调递减的负对数似然，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_1}^\text{positive}=-\log\left(\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\right)\in\left(0,+\infty\right),">
+</p>
+
+而在负样本中，动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 的预训练损失函数为失败概率 ![](https://latex.codecogs.com/svg.latex?1-\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)) 的负对数，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_1}^\text{negative}=-\log\left(1-\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\right)\in\left(0,+\infty\right),">
+</p>
+
+它在 ![](https://latex.codecogs.com/svg.latex?\left(0,1\right)) 区间内单调递增。<br>
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 在第 ![](https://latex.codecogs.com/svg.latex?i) 个样本中的预训练损失函数可统一表示为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_1}=-r_i\log\left(\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\right)-\left(1-r_i\right)\log\left(1-\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\right).">
+</p>
+
+<br><br><br><br><br><br><br>
+
+# 可供性迁移
