@@ -224,3 +224,42 @@
 <br><br><br><br><br><br><br>
 
 # 可供性迁移
+
+针对一个从未在预训练正样本数据集中见过的目标物体，要求双臂机器人执行任务
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?T\in\{\text{Unfolding,Opening,Closing,Uncapping,Capping}\}.">
+</p>
+
+首先，在预训练正样本数据集中检索同一任务 ![](https://latex.codecogs.com/svg.latex?T) 下的多个源物体。这些源物体并不必然与目标物体属于同一类别。<br>
+对于每一个源物体，其在被接触操作前的深度图 ![](https://latex.codecogs.com/svg.latex?D_s) 、RGB图像 ![](https://latex.codecogs.com/svg.latex?I_s\in\mathbb{R}^{H_s\times{}W_s\times{}3}) 以及左右夹爪待接触点 ![](https://latex.codecogs.com/svg.latex?p_{s_1}^{2D},p_{s_2}^{2D}) 已经被记录过。目标物体的深度图 ![](https://latex.codecogs.com/svg.latex?D_t) 、RGB图像 ![](https://latex.codecogs.com/svg.latex?I_t\in\mathbb{R}^{H_t\times{}W_t\times{}3}) 现在也是已知的。<br>
+用DIFT基础模型分别对 ![](https://latex.codecogs.com/svg.latex?I_s\in\mathbb{R}^{H_s\times{}W_s\times{}3},I_t\in\mathbb{R}^{H_t\times{}W_t\times{}3}) 进行特征提取，得到像素级特征矩阵 ![](https://latex.codecogs.com/svg.latex?F_s\in\mathbb{R}^{H_s\times{}W_s\times{}d_{DIFT}},F_t\in\mathbb{R}^{H_t\times{}W_t\times{}d_{DIFT}}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\begin{align*}F_s&=\text{DIFT}\left(I_s\right)\in\mathbb{R}^{H_s\times{}W_s\times{}d_{DIFT}},\\F_t&=\text{DIFT}\left(I_t\right)\in\mathbb{R}^{H_t\times{}W_t\times{}d_{DIFT}}.\end{align*}">
+</p>
+
+从 ![](https://latex.codecogs.com/svg.latex?F_s\in\mathbb{R}^{H_s\times{}W_s\times{}d_{DIFT}}) 中抽取出左、右夹爪待接触点像素 ![](https://latex.codecogs.com/svg.latex?p_{s_1}^{2D},p_{s_2}^{2D}) 的特征向量 ![](https://latex.codecogs.com/svg.latex?f_{p_{s1}^{2D}},f_{p_{s2}^{2D}}\in\mathbb{R}^{d_{DIFT}}) 。后文用 ![](https://latex.codecogs.com/svg.latex?f_{p_s^{2D}}\in\mathbb{R}^{d_{DIFT}}) 任指其一。<br>
+针对 ![](https://latex.codecogs.com/svg.latex?f_{p_s^{2D}}\in\mathbb{R}^{d_{DIFT}}) ，以及 ![](https://latex.codecogs.com/svg.latex?F_t=\text{DIFT}\left(I_t\right)\in\mathbb{R}^{H_t\times{}W_t\times{}d_{DIFT}}) 中的任一像素特征向量 ![](https://latex.codecogs.com/svg.latex?f_{p_{tj}^{2D}}\in\mathbb{R}^{d_{DIFT}}) ，计算两者的语义相似度，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?similarity_j=\cos\left\langle{}f_{p_s^{2D}},f_{p_{tj}^{2D}}\right\rangle,">
+</p>
+
+选择最高的语义相似度所对应的目标物体RGB图像像素 ![](https://latex.codecogs.com/svg.latex?p_t^{2D}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?p_t^{2D}=\underset{p_{tj}^{2D}}{\text{argmax}}\;\cos\left\langle{}f_{p_s^{2D}},f_{p_{tj}^{2D}}\right\rangle,">
+</p>
+
+借助于从深度图 ![](https://latex.codecogs.com/svg.latex?D_t) 生成目标物体观测点云 ![](https://latex.codecogs.com/svg.latex?O_t\in\mathbb{R}^{N\times{}3}) 这一过程，对 ![](https://latex.codecogs.com/svg.latex?p_t^{2D}) 像素进行反投影，得到 ![](https://latex.codecogs.com/svg.latex?p_t^{3D}\in{}O_t) 三维空间点，它就是相应夹爪即将在目标物体上接触的的待接触点。<br>
+在Bi-Adapt双臂操作框架中，把可供性狭义地定义为物体即将被接触操作前的待接触点像素。源物体待接触点像素 ![](https://latex.codecogs.com/svg.latex?p_{s_1}^{2D},p_{s_2}^{2D}) 分别由基础模型映射到目标物体待接触点像素 ![](https://latex.codecogs.com/svg.latex?p_{t_1}^{2D},p_{t_2}^{2D}) 的过程，就是可供性迁移的过程。
+<br><br><br><br><br><br><br><br><br><br>
+
+# 少样本适应
+
+所得的待接触点对 ![](https://latex.codecogs.com/svg.latex?p_{t_1}^{3D},p_{t_2}^{3D}\in{}O_t) 并不必然适合操作。正因如此，才需要检索同一任务 ![](https://latex.codecogs.com/svg.latex?T) 下的多个源物体，从而相应得出目标物体上的多组候选的待接触点对。但即便如此，由于这些源物体并不必然与目标物体属于同一类别，不同类别的物体又在物理属性和几何形状上存在显著差异，所以，多组候选的待接触点对，与仅经过预训练的动作提议网络所相应提议的多组夹爪姿态对所组成的多组候选的动作对，可能全都不成功，全部遭遇失败。<br>
+为了提升神经网络在新类别物体上的性能，需要让神经网络运用自己的预训练知识进行前向推理，最后利用提议动作的执行结果对神经网络进行微调。<br>
+神经网络对多组候选的待接触点对并行展开前向推理。在后文中，用 ![](https://latex.codecogs.com/svg.latex?p_{t_1}^{3D},p_{t_2}^{3D}\in{}O_t) 任指其中一组点对。
+
+## 1、神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 的前向推理
