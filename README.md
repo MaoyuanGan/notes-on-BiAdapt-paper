@@ -264,7 +264,7 @@
 
 ## 1、神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 的前向推理
 
-cVAE的推理本质上是轻量的，这主要得益于这一点：如果潜空间在预训练期间得到了良好的塑造，那么潜变量在推理期间的生成就可以具备不依赖于任何后验的无条件性，实现真正的随机多样且均合理的生成。具体而言，直接从标准正态分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(0,I\right)) 中随机采样，无条件地得到潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 。<br>
+cVAE的推理本质上是轻量的，这主要得益于这一点：如果潜空间在预训练期间得到了良好的塑造（通过模型的全体可学习参数隐式体现），那么潜变量在推理期间的生成就可以具备不依赖于任何后验的无条件性，实现真正的随机多样且均合理的生成。具体而言，直接从标准正态分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(0,I\right)) 中随机采样，无条件地得到潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 。<br>
 用经过预训练的解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_1(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 进行解码，得到提议夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_1\in{}SO(3)) ，即
 
 <p align="center">
@@ -355,4 +355,67 @@ cVAE的推理本质上是轻量的，这主要得益于这一点：如果潜空�
 
 ## 4、动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 的微调
 
+如果本次新类别物体操作任务成功，即 ![](https://latex.codecogs.com/svg.latex?r=1) ，那么过程中产生的中间量将用于对动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1,\mathcal{A}_2) 进行微调。如果失败，即 ![](https://latex.codecogs.com/svg.latex?r=0) ，则不用于微调。以下对 ![](https://latex.codecogs.com/svg.latex?r=1) 的情况进行说明。<br>
 用经过预训练的 PointNet++ (segmentation version) 神经网络 ![](https://latex.codecogs.com/svg.latex?\text{PN}(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?O_t\in\mathbb{R}^{N\times{}3}) 进行逐点特征提取，得到点级特征矩阵 ![](https://latex.codecogs.com/svg.latex?F\in\mathbb{R}^{N\times{}128}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?F=\text{PN}\left(O_t\right)\in\mathbb{R}^{N\times{}128}.">
+</p>
+
+用经过预训练的编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_2\left(\cdot,\cdot,\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?\check{R}_2\in{}SO(3),F\in\mathbb{R}^{N\times{}128},\check{f}_{p_1}\in\mathbb{R}^{32},\check{f}_{R_1}\in\mathbb{R}^{32},\check{f}_{p_2}\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_2\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma_2\in\mathbb{R}^{d\times{}d}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\left(\mu_2,\Sigma_2\right)=\text{Enc}_2\left(\check{R}_2,F,\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2}\right),">
+</p>
+
+它们组成潜变量分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_2,\Sigma_2\right)) 。从 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_2,\Sigma_2\right)) 中随机采样，得到潜变量 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 。<br>
+用经过预训练的解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_2(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 进行解码，得到预测夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_2\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_2=\text{Dec}_2(z)\in{}SO(3).">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 的微调损失函数即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{A}_2}=\mathcal{L}_{geo}\left(\widehat{R}_2,\check{R}_2\right)+D_{KL}\left(\mathcal{N}\left(\mu_2,\Sigma_2\right)\,\|\;\mathcal{N}\left(0,I\right)\right),">
+</p>
+
+其中潜空间正则化项可另记为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?D_{KL}\left(q\left(z\;|\;\check{R}_2,F,\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2}\right)\,\|\;\mathcal{N}\left(0,I\right)\right).">
+</p>
+
+## 5、动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 的微调
+
+用经过预训练的编码器 ![](https://latex.codecogs.com/svg.latex?\text{Enc}_1\left(\cdot,\cdot,\cdot\right)) 对 ![](https://latex.codecogs.com/svg.latex?\check{R}_1\in{}SO(3),F\in\mathbb{R}^{N\times{}128},\check{f}_{p_1}^\prime\in\mathbb{R}^{32}) 进行编码，得到均值向量 ![](https://latex.codecogs.com/svg.latex?\mu_1\in\mathbb{R}^d) 和协方差矩阵 ![](https://latex.codecogs.com/svg.latex?\Sigma_1\in\mathbb{R}^{d\times{}d}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\left(\mu_1,\Sigma_1\right)=\text{Enc}_1\left(\check{R}_1,F,\check{f}_{p_1}^\prime\right),">
+</p>
+
+它们组成潜变量分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_1,\Sigma_1\right)) 。从 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(\mu_1,\Sigma_1\right)) 中随机采样，得到潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 。<br>
+用经过预训练的解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_1(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 进行解码，得到预测夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_1\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_1=\text{Dec}_1\left(z^\prime\right)\in{}SO(3).">
+</p>
+
+动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1) 的微调损失函数即为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{A}_1}=\mathcal{L}_{geo}\left(\widehat{R}_1,\check{R}_1\right)+D_{KL}\left(\mathcal{N}\left(\mu_1,\Sigma_1\right)\,\|\;\mathcal{N}\left(0,I\right)\right),">
+</p>
+
+其中潜空间正则化项可另记为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?D_{KL}\left(q\left(z^\prime\;|\;\check{R}_1,F,\check{f}_{p_1}^\prime\right)\,\|\;\mathcal{N}\left(0,I\right)\right).">
+</p>
+
+## 6、总结
+
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1,\mathcal{C}_2) 以及动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_1,\mathcal{A}_2) 经过微调后，“感知模块（原论文中指神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1,\mathcal{M}_2) 组成的整体）能够更好地判断所提出的动作是否会成功，并对其进行调整以适应新类别”。<br>
+原论文作者团队指出：<br>
+“只需在新类别的有限实例上进行少量交互，感知模块便能探索由基础模型选出的新类别语义显著区域，并更好地理解其与已学类别之间的几何与物理差异。经过少样本适应后，有关操作的知识便迁移到了新类别上。得益于同一类别内几何特征与物理属性的泛化能力，我们适应后的模块无需额外交互即可操作该类别中未见过的物体。”
