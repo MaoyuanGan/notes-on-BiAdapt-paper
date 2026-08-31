@@ -263,3 +263,96 @@
 神经网络对多组候选的待接触点对并行展开前向推理。在后文中，用 ![](https://latex.codecogs.com/svg.latex?p_{t_1}^{3D},p_{t_2}^{3D}\in{}O_t) 任指其中一组点对。
 
 ## 1、神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 的前向推理
+
+cVAE的推理本质上是轻量的，这主要得益于这一点：如果潜空间在预训练期间得到了良好的塑造，那么潜变量在推理期间的生成就可以具备不依赖于任何后验的无条件性，实现真正的随机多样且均合理的生成。具体而言，直接从标准正态分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(0,I\right)) 中随机采样，无条件地得到潜变量 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 。<br>
+用经过预训练的解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_1(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z^\prime\in\mathbb{R}^d) 进行解码，得到提议夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_1\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_1=\text{Dec}_1\left(z^\prime\right)\in{}SO(3).">
+</p>
+
+用经过预训练的两个多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}(\cdot),\text{MLP}^\prime(\cdot)) 分别对 ![](https://latex.codecogs.com/svg.latex?p_{t_1}^{3D}\in{}O_t,\widehat{R}_1\in{}SO(3)) 进行编码，分别得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{p_1}^\prime,f_{R_1}^\prime\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\begin{align*}f_{p_1}^\prime&=\text{MLP}\left(p_{t_1}^{3D}\right)\in\mathbb{R}^{32},\\f_{R_1}^\prime&=\text{MLP}^\prime\left(\widehat{R}_1\right)\in\mathbb{R}^{32}.\end{align*}">
+</p>
+
+经过预训练的动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1\left(\cdot,\cdot\right)) 接受 ![](https://latex.codecogs.com/svg.latex?f_{p_1}^\prime,f_{R_1}^\prime\in\mathbb{R}^{32}) 作为输入，输出左夹爪提议动作 ![](https://latex.codecogs.com/svg.latex?\widehat{u}_1=\left(p_{t_1}^{3D},\widehat{R}_1\right)) 的成功概率，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right)\in\left(0,1\right).">
+</p>
+
+神经网络对多组候选的待接触点对并行展开前向推理，那么就会并行产生多组对应的提议动作对，进而并行预估各个左夹爪动作的成功概率、各个右夹爪动作的成功概率。<br>
+选取最高的成功概率所对应的左夹爪提议动作，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\check{u}_1=\left(\check{p}_{t_1}^{3D},\check{R}_1\right)=\underset{\widehat{u}_1}{\text{argmax}}\;\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right),">
+</p>
+
+将其作为左夹爪即将在目标物体上执行的动作。<br>
+此外，将 ![](https://latex.codecogs.com/svg.latex?\check{p}_{t_1}^{3D}\in{}O_t,\check{R}_1\in{}SO(3)) 的语义向量分别记为 ![](https://latex.codecogs.com/svg.latex?\check{f}_{p_1}^\prime,\check{f}_{R_1}^\prime\in\mathbb{R}^{32}) ，它们满足
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_1\left(\check{f}_{p_1}^\prime,\check{f}_{R_1}^\prime\right)=\max\;\mathcal{C}_1\left(f_{p_1}^\prime,f_{R_1}^\prime\right).">
+</p>
+
+## 2、神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_2) 的前向推理
+
+除了需要额外接受左夹爪动作 ![](https://latex.codecogs.com/svg.latex?\check{u}_1=\left(\check{p}_{t_1}^{3D},\check{R}_1\right)) 的“条件化”以外，神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_2) 的前向推理过程与神经网络模块 ![](https://latex.codecogs.com/svg.latex?\mathcal{M}_1) 的前向推理过程几乎别无二致。通过在动作评分时额外考虑 ![](https://latex.codecogs.com/svg.latex?\check{p}_{t_1}^{3D},\check{R}_1) ，来间接实现“条件化”。与 ![](https://latex.codecogs.com/svg.latex?\check{u}_1=\left(\check{p}_{t_1}^{3D},\check{R}_1\right)) 配合不佳从而在双臂操作任务中多半失败的右夹爪提议动作，被动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 赋予较低的成功概率预估值。<br>
+直接从标准正态分布 ![](https://latex.codecogs.com/svg.latex?\mathcal{N}\left(0,I\right)) 中随机采样，无条件地得到潜变量 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 。<br>
+用经过预训练的解码器 ![](https://latex.codecogs.com/svg.latex?\text{Dec}_2(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?z\in\mathbb{R}^d) 进行解码，得到提议夹爪姿态 ![](https://latex.codecogs.com/svg.latex?\widehat{R}_2\in{}SO(3)) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\widehat{R}_2=\text{Dec}_2\left(z\right)\in{}SO(3).">
+</p>
+
+用经过预训练的四个多层感知机 ![](https://latex.codecogs.com/svg.latex?\text{MLP}_1(\cdot),\text{MLP}_2(\cdot),\text{MLP}_3(\cdot),\text{MLP}_4(\cdot)) 分别对 ![](https://latex.codecogs.com/svg.latex?\check{p}_{t_1}^{3D}\in{}O_t,\check{R}_1\in{}SO(3),p_{t_2}^{3D}\in{}O_t,\widehat{R}_2\in{}SO(3)) 进行编码，分别得到语义向量 ![](https://latex.codecogs.com/svg.latex?f_{p_1},f_{R_1},f_{p_2},f_{R_2}\in\mathbb{R}^{32}) ，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\begin{align*}f_{p_1}&=\text{MLP}_1\left(\check{p}_{t_1}^{3D}\right)\in\mathbb{R}^{32},\\f_{R_1}&=\text{MLP}_2\left(\check{R}_1\right)\in\mathbb{R}^{32},\\f_{p_2}&=\text{MLP}_3\left(p_{t_2}^{3D}\right)\in\mathbb{R}^{32},\\f_{R_2}&=\text{MLP}_4\left(\widehat{R}_2\right)\in\mathbb{R}^{32}.\end{align*}">
+</p>
+
+经过预训练的动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(\cdot,\cdot,\cdot,\cdot\right)) 接受 ![](https://latex.codecogs.com/svg.latex?f_{p_1},f_{R_1},f_{p_2},f_{R_2}\in\mathbb{R}^{32}) 作为输入，输出右夹爪提议动作 ![](https://latex.codecogs.com/svg.latex?\widehat{u}_2=\left(p_{t_2}^{3D},\widehat{R}_2\right)) 的成功概率，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right)\in\left(0,1\right).">
+</p>
+
+选取最高的成功概率所对应的右夹爪提议动作，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\check{u}_2=\left(\check{p}_{t_2}^{3D},\check{R}_2\right)=\underset{\widehat{u}_2}{\text{argmax}}\;\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right),">
+</p>
+
+将其作为右夹爪即将在目标物体上执行的动作。<br>
+此外，将 ![](https://latex.codecogs.com/svg.latex?\check{p}_{t_1}^{3D}\in{}O_t,\check{R}_1\in{}SO(3),\check{p}_{t_2}^{3D}\in{}O_t,\check{R}_2\in{}SO(3)) 的语义向量分别记为 ![](https://latex.codecogs.com/svg.latex?\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2},\check{f}_{R_2}\in\mathbb{R}^{32}) ，它们满足
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{C}_2\left(\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2},\check{f}_{R_2}\right)=\max\;\mathcal{C}_2\left(f_{p_1},f_{R_1},f_{p_2},f_{R_2}\right).">
+</p>
+
+## 3、动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1,\mathcal{C}_2) 的微调
+
+左夹爪动作 ![](https://latex.codecogs.com/svg.latex?\check{u}_1=\left(\check{p}_{t_1}^{3D},\check{R}_1\right)) 以及右夹爪动作 ![](https://latex.codecogs.com/svg.latex?\check{u}_2=\left(\check{p}_{t_2}^{3D},\check{R}_2\right)) 被同时在目标物体上执行。执行完毕后，获得任务成败结果，即
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?r\in\{1,0\}.">
+</p>
+
+![](https://latex.codecogs.com/svg.latex?r=1) 表示任务执行成功，![](https://latex.codecogs.com/svg.latex?r=0) 表示任务执行失败。<br>
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_1) 的微调损失函数为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_1}=-r\log\left(\mathcal{C}_1\left(\check{f}_{p_1}^\prime,\check{f}_{R_1}^\prime\right)\right)-\left(1-r\right)\log\left(1-\mathcal{C}_1\left(\check{f}_{p_1}^\prime,\check{f}_{R_1}^\prime\right)\right),">
+</p>
+
+动作评分网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{C}_2) 的微调损失函数为
+
+<p align="center">
+<img src="https://latex.codecogs.com/svg.latex?\mathcal{L}_{\mathcal{C}_2}=-r\log\left(\mathcal{C}_2\left(\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2},\check{f}_{R_2}\right)\right)-\left(1-r\right)\log\left(1-\mathcal{C}_2\left(\check{f}_{p_1},\check{f}_{R_1},\check{f}_{p_2},\check{f}_{R_2}\right)\right).">
+</p>
+
+## 4、动作提议网络 ![](https://latex.codecogs.com/svg.latex?\mathcal{A}_2) 的微调
+
+用经过预训练的 PointNet++ (segmentation version) 神经网络 ![](https://latex.codecogs.com/svg.latex?\text{PN}(\cdot)) 对 ![](https://latex.codecogs.com/svg.latex?O_t\in\mathbb{R}^{N\times{}3}) 进行逐点特征提取，得到点级特征矩阵 ![](https://latex.codecogs.com/svg.latex?F\in\mathbb{R}^{N\times{}128}) ，即
